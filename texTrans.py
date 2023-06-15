@@ -6,11 +6,11 @@ Created on Fri Sep 28 09:15:18 2018
 @author: saschajecklin
 """
 import re
-import pydeepl
 import argparse
 import time
 from tqdm import tqdm
-
+import deepl
+DEEPL_AUTH_KEY = ""
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description='Translates LaTeX files with DeepL')
     parser.add_argument("-f", dest="FROM", default="DE", required=True, help="Language of the source document(s) e.g. DE")
@@ -27,11 +27,12 @@ def make_xlat(*args, **kwds):
         return rx.sub(one_xlat, text)
     return xlat
 
-def translate(text: str, lang_in="DE", lang_out="EN"):
+def translate(text: str, lang_in="DE", lang_out="EN-US"):
     translated = []
     commands = (r"^@#X\d{18,19}$", # if it starts with @#X followed by 18 to 19 digits its just a hash --> no translation needed
                 r"^@#X-\d{18,19}$")
     only_hash_pattern = re.compile("|".join(commands))
+    translator = deepl.Translator(DEEPL_AUTH_KEY)
     for line in text.splitlines():
         #print(line)
         if line in {'', '\n'} or only_hash_pattern.match(line):
@@ -39,8 +40,7 @@ def translate(text: str, lang_in="DE", lang_out="EN"):
 #        elif not line.strip():
 #            translated.append('')
         else:
-            translated.append(pydeepl.translate(line, lang_in, lang_out))
-            time.sleep(0.6) #problem with to many requests. not yet solved
+            translated.append(translator.translate_text(line, source_lang=lang_in, target_lang=lang_out).text)
     translated = '\n'.join(translated)
     return translated
 
@@ -54,9 +54,9 @@ if __name__ == "__main__":
     with open(fileInputName) as fileIn, open(fileOutName, "w") as fileOut:
 
         fileStr = fileIn.read()
-    
+
         print("Starting hashing...")
-    
+
         #replace commands like \begin{*}, \end{*}, tabs etc. with hashes
         search_pattern = (
             r"\\begin\{\w+\}",
@@ -72,14 +72,14 @@ if __name__ == "__main__":
             r"\%.*",
         )
         search_result_1 = re.findall("|".join(search_pattern), fileStr)
-        # random number for every found command + a prefix which hopefully 
+        # random number for every found command + a prefix which hopefully
         # doens't appear in text. Used to skip lines later, which don't need translation
         list1 = ['@#X{}'.format(hash(x)) for x in search_result_1]
         #make a dictionary out of hashes
         d1 = dict(zip(search_result_1, list1))
         hash_dictionary = make_xlat(d1)
         hashedText = hash_dictionary(fileStr)
-    
+
         #replace all latex commands (starting with a backslash) with hashes
         search_result_2 = re.findall( r"\\\w+", hashedText)
         #random number  + prefix again
@@ -90,20 +90,20 @@ if __name__ == "__main__":
         hashedText = hash_dictionary(hashedText)
         #print(hashedText)
         #fileOut.write(translate(hashedText))
-    
+
         d1.update(d2) # combine dictionaries
         #with open('hash_dict.json', 'w') as f:
         #json.dump(d1, f)
-    
+
         print("Hashing done. Starting translation...")
 
         translated = translate(text=hashedText, lang_in = args.FROM, lang_out = args.TO)
-    
+
         d1Inv = {val:key for (key, val) in d1.items()} #swap dictionary
         translate2 = make_xlat(d1Inv)
         fileStrOut = translate2(translated)
         #print(fileStrOut)
-    
+
         fileOut.write(fileStrOut)
-    
+
         print("Success")
