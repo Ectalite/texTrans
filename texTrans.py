@@ -8,14 +8,17 @@ Created on Fri Sep 28 09:15:18 2018
 import re
 import argparse
 import time
-from tqdm import tqdm
 import deepl
-DEEPL_AUTH_KEY = ""
+import os, sys
+
 def parse_args(args=None):
     parser = argparse.ArgumentParser(description='Translates LaTeX files with DeepL')
     parser.add_argument("-f", dest="FROM", default="DE", required=True, help="Language of the source document(s) e.g. DE")
-    parser.add_argument("-t", dest="TO", default="EN", required=True, help="Language of the target document e.g EN")
-    parser.add_argument("-i", dest="FILENAME", required=True, nargs="+", help="Path(s) to the latex file(s)")
+    parser.add_argument("-t", dest="TO", default="EN", required=True, help="Language of the target document e.g EN-GB")
+    parser.add_argument("-i", dest="INPUT", required=True,  help="Path to the latex input file")
+    parser.add_argument("-o", dest="OUTPUT", required=True, help="Path to the latex output file")
+    parser.add_argument("-d", dest="DEEPL_AUTH_KEY", required=False, help="Deepl API key")
+
     return parser.parse_args(args)
 
 def make_xlat(*args, **kwds):
@@ -27,12 +30,12 @@ def make_xlat(*args, **kwds):
         return rx.sub(one_xlat, text)
     return xlat
 
-def translate(text: str, lang_in="DE", lang_out="EN-US"):
+def translate(text: str, deepl_auth: str, lang_in="DE", lang_out="EN-US"):
     translated = []
     commands = (r"^@#X\d{18,19}$", # if it starts with @#X followed by 18 to 19 digits its just a hash --> no translation needed
                 r"^@#X-\d{18,19}$")
     only_hash_pattern = re.compile("|".join(commands))
-    translator = deepl.Translator(DEEPL_AUTH_KEY)
+    translator = deepl.Translator(deepl_auth)
     for line in text.splitlines():
         #print(line)
         if line in {'', '\n'} or only_hash_pattern.match(line):
@@ -46,10 +49,17 @@ def translate(text: str, lang_in="DE", lang_out="EN-US"):
 
 if __name__ == "__main__":
     args = parse_args()
-    print('Translating file {} to {} from {}'.format(*args.FILENAME, args.TO, args.FROM))
-    fileInputName = args.FILENAME[0]
-    #fileInputName = "Introduction.tex"
-    fileOutName = fileInputName.split('.')[0] + "_trans.tex"
+    DEEPL_AUTH_KEY = os.environ.get("DEEPL_AUTH_KEY")
+    if DEEPL_AUTH_KEY == None :
+        if args.DEEPL_AUTH_KEY == None:
+            print('Specify a Deepl API key.')
+            sys.exit(0)
+        else:
+           DEEPL_AUTH_KEY = args.DEEPL_AUTH_KEY
+
+    print('Translating file {} to {} from {} and saving it to {}'.format(args.INPUT, args.TO, args.FROM, args.OUTPUT))
+    fileInputName = args.INPUT
+    fileOutName = args.OUTPUT
 
     with open(fileInputName) as fileIn, open(fileOutName, "w") as fileOut:
 
@@ -97,7 +107,7 @@ if __name__ == "__main__":
 
         print("Hashing done. Starting translation...")
 
-        translated = translate(text=hashedText, lang_in = args.FROM, lang_out = args.TO)
+        translated = translate(text=hashedText, lang_in = args.FROM, lang_out = args.TO, deepl_auth=DEEPL_AUTH_KEY)
 
         d1Inv = {val:key for (key, val) in d1.items()} #swap dictionary
         translate2 = make_xlat(d1Inv)
